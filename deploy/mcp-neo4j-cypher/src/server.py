@@ -12,7 +12,9 @@ from typing import Any, Dict, List
 from neo4j import GraphDatabase
 import re
 import os
-from flask import Flask, request, jsonify
+import json
+import asyncio
+from flask import Flask, request, jsonify, Response, stream_with_context
 
 logger = logging.getLogger('mcp_neo4j_cypher')
 logger.setLevel(logging.INFO)
@@ -134,27 +136,87 @@ RETURN label, apoc.map.fromPairs(attributes) as attributes, apoc.map.fromPairs(r
     except Exception as e:
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
-# MCP endpoint
-@app.route("/mcp", methods=["POST"])
-async def mcp_endpoint():
-    """Handle MCP requests"""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Invalid request"}), 400
+# MCP endpoint with proper SSE support
+@app.route("/mcp", methods=["GET", "POST"])
+def mcp_endpoint():
+    """Handle MCP requests with proper SSE support"""
+    logger.info(f"MCP request received: {request.method} {request.path}")
+    logger.debug(f"Headers: {request.headers}")
+    
+    if request.method == "GET":
+        # Handle SSE connection
+        logger.info("Handling SSE connection")
+        
+        def generate():
+            # Send initial connected message
+            yield "data: {\"type\":\"connected\"}\n\n"
+            
+            # Keep connection alive
+            while True:
+                # Send a ping every 30 seconds to keep the connection alive
+                yield "data: {\"type\":\"ping\"}\n\n"
+                time.sleep(30)
+        
+        # Set up SSE response with proper headers
+        response = Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "X-Accel-Buffering": "no"  # Disable buffering for Nginx
+            }
+        )
+        return response
+    
+    elif request.method == "POST":
+        # Handle JSON-RPC style requests
+        logger.info("Handling POST request")
+        data = request.get_json()
+        if not data:
+            logger.error("Invalid request: No JSON data")
+            return jsonify({"error": "Invalid request"}), 400
 
-    try:
-        # Simulate the stdio environment
-        # In a real implementation, you would parse the request and call the appropriate handler
-        if data["method"] == "list_tools":
-            result = await handle_list_tools()
-            return jsonify({"result": result})
-        elif data["method"] == "call_tool":
-            result = await handle_call_tool(data["params"]["name"], data["params"]["arguments"])
-            return jsonify({"result": result})
-        else:
-            return jsonify({"error": f"Unknown method: {data['method']}"}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        try:
+            logger.info(f"MCP method: {data.get('method')}")
+            
+            # Simulate the stdio environment
+            if data.get("method") == "list_tools":
+                logger.info("Handling list_tools request")
+                result = asyncio.run(handle_list_tools())
+                return jsonify({"result": result})
+            elif data.get("method") == "call_tool":
+                logger.info(f"Handling call_tool request: {data.get('params', {}).get('name')}")
+                result = asyncio.run(handle_call_tool(
+                    data.get("params", {}).get("name"), 
+                    data.get("params", {}).get("arguments")
+                ))
+                return jsonify({"result": result})
+            else:
+                logger.error(f"Unknown method: {data.get('method')}")
+                return jsonify({"error": f"Unknown method: {data.get('method')}"}), 400
+        except Exception as e:
+            logger.error(f"Error handling MCP request: {e}")
+            return jsonify({"error": str(e)}), 500
+
+# Add CORS support
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
+
+@app.route("/mcp", methods=["OPTIONS"])
+def mcp_options():
+    """Handle CORS preflight requests"""
+    response = jsonify({"status": "ok"})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
 
 # Global database instance
 db = None
@@ -193,5 +255,6 @@ async def main(neo4j_uri, neo4j_username, neo4j_password):
 
 # For running the Flask app directly
 if __name__ == "__main__":
+    import time  # Import time for SSE keep-alive
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host="0.0.0.0", port=port)
