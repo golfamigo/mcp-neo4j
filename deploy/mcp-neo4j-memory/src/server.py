@@ -1,27 +1,53 @@
+#!/usr/bin/env python
+"""
+Neo4j Memory MCP Server - 使用FastAPI和FastMCP实现
+"""
 import os
+import sys
 import logging
+import uvicorn
 import json
-import asyncio
-import time
+from logging.handlers import RotatingFileHandler
+from fastapi import FastAPI
+from mcp.server.fastmcp import FastMCP, Context
+from dotenv import load_dotenv
 from typing import Any, Dict, List, Optional
-from contextlib import asynccontextmanager
+from pydantic import BaseModel
 
 import neo4j
 from neo4j import GraphDatabase
-from pydantic import BaseModel
 
-import mcp.types as types
-from mcp.server import NotificationOptions, Server
-from mcp.server.models import InitializationOptions
-import mcp.server.stdio
+# 加载.env文件
+load_dotenv()
 
-from flask import Flask, request, jsonify, Response, stream_with_context
-
-# Set up logging
+# 设置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(
+            "neo4j_memory_server.log", 
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5
+        )
+    ]
+)
 logger = logging.getLogger('mcp_neo4j_memory')
-logger.setLevel(logging.INFO)
+logger.info("Starting Neo4j Memory MCP Server")
 
-# Models for our knowledge graph
+# 获取环境变量
+NEO4J_URI = os.environ.get('NEO4J_URI') or os.environ.get('NEO4J_URL', 'bolt://localhost:7687')
+NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
+NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'password')
+DEBUG = os.environ.get('DEBUG', 'true').lower() == 'true'
+
+# 设置日志级别
+if DEBUG:
+    logging.getLogger().setLevel(logging.DEBUG)
+    logger.debug("Debug mode enabled")
+
+# 知识图谱模型
 class Entity(BaseModel):
     name: str
     type: str
@@ -201,375 +227,162 @@ class Neo4jMemory:
     async def find_nodes(self, names: List[str]) -> KnowledgeGraph:
         return await self.load_graph("name: (" + " ".join(names) + ")")
 
-# Flask app initialization
-app = Flask(__name__)
-server = Server("mcp-neo4j-memory")
+# 初始化Neo4j数据库连接
+try:
+    logger.info(f"Connecting to Neo4j at {NEO4J_URI}")
+    neo4j_driver = GraphDatabase.driver(
+        NEO4J_URI,
+        auth=(NEO4J_USER, NEO4J_PASSWORD)
+    )
+    neo4j_driver.verify_connectivity()
+    logger.info(f"Connected to Neo4j at {NEO4J_URI}")
+    
+    # 初始化内存
+    memory = Neo4jMemory(neo4j_driver)
+except Exception as e:
+    logger.error(f"Failed to connect to Neo4j: {e}")
+    if not DEBUG:
+        sys.exit(1)
+    else:
+        logger.warning("Using mock database for local development")
+        neo4j_driver = None
+        memory = None
 
-# Add a health check endpoint
-@app.route("/", methods=["GET"])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({
+# 创建FastMCP实例
+mcp = FastMCP("neo4j-memory")
+
+# 注册工具
+@mcp.tool("create_entities", "Create multiple new entities in the knowledge graph")
+async def create_entities_tool(ctx: Context, entities: List[Dict[str, Any]]):
+    """创建多个实体"""
+    logger.info(f"Creating {len(entities)} entities")
+    
+    try:
+        entity_objects = [Entity(**entity) for entity in entities]
+        result = await memory.create_entities(entity_objects)
+        return {"entities": [e.model_dump() for e in result]}
+    except Exception as e:
+        logger.error(f"Error creating entities: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("create_relations", "Create multiple new relations between entities in the knowledge graph")
+async def create_relations_tool(ctx: Context, relations: List[Dict[str, Any]]):
+    """创建多个关系"""
+    logger.info(f"Creating {len(relations)} relations")
+    
+    try:
+        relation_objects = [Relation(**relation) for relation in relations]
+        result = await memory.create_relations(relation_objects)
+        return {"relations": [r.model_dump() for r in result]}
+    except Exception as e:
+        logger.error(f"Error creating relations: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("add_observations", "Add new observations to existing entities in the knowledge graph")
+async def add_observations_tool(ctx: Context, observations: List[Dict[str, Any]]):
+    """添加观察内容"""
+    logger.info(f"Adding observations to {len(observations)} entities")
+    
+    try:
+        observation_objects = [ObservationAddition(**obs) for obs in observations]
+        result = await memory.add_observations(observation_objects)
+        return {"results": result}
+    except Exception as e:
+        logger.error(f"Error adding observations: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("delete_entities", "Delete multiple entities and their associated relations from the knowledge graph")
+async def delete_entities_tool(ctx: Context, entityNames: List[str]):
+    """删除实体"""
+    logger.info(f"Deleting {len(entityNames)} entities")
+    
+    try:
+        await memory.delete_entities(entityNames)
+        return {"status": "success", "message": "Entities deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting entities: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("delete_observations", "Delete specific observations from entities in the knowledge graph")
+async def delete_observations_tool(ctx: Context, deletions: List[Dict[str, Any]]):
+    """删除观察内容"""
+    logger.info(f"Deleting observations from {len(deletions)} entities")
+    
+    try:
+        deletion_objects = [ObservationDeletion(**deletion) for deletion in deletions]
+        await memory.delete_observations(deletion_objects)
+        return {"status": "success", "message": "Observations deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting observations: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("delete_relations", "Delete multiple relations from the knowledge graph")
+async def delete_relations_tool(ctx: Context, relations: List[Dict[str, Any]]):
+    """删除关系"""
+    logger.info(f"Deleting {len(relations)} relations")
+    
+    try:
+        relation_objects = [Relation(**relation) for relation in relations]
+        await memory.delete_relations(relation_objects)
+        return {"status": "success", "message": "Relations deleted successfully"}
+    except Exception as e:
+        logger.error(f"Error deleting relations: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("read_graph", "Read the entire knowledge graph")
+async def read_graph_tool(ctx: Context):
+    """读取整个知识图谱"""
+    logger.info("Reading entire graph")
+    
+    try:
+        result = await memory.read_graph()
+        return result.model_dump()
+    except Exception as e:
+        logger.error(f"Error reading graph: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("search_nodes", "Search for nodes in the knowledge graph based on a query")
+async def search_nodes_tool(ctx: Context, query: str):
+    """搜索节点"""
+    logger.info(f"Searching nodes with query: {query}")
+    
+    try:
+        result = await memory.search_nodes(query)
+        return result.model_dump()
+    except Exception as e:
+        logger.error(f"Error searching nodes: {e}")
+        return {"error": str(e)}
+
+@mcp.tool("find_nodes", "Open specific nodes in the knowledge graph by their names")
+async def find_nodes_tool(ctx: Context, names: List[str]):
+    """查找特定节点"""
+    logger.info(f"Finding nodes: {names}")
+    
+    try:
+        result = await memory.find_nodes(names)
+        return result.model_dump()
+    except Exception as e:
+        logger.error(f"Error finding nodes: {e}")
+        return {"error": str(e)}
+
+# 创建FastAPI应用
+app = FastAPI(title="Neo4j Memory MCP Server")
+
+# 主页路由
+@app.get("/")
+def index():
+    """健康检查端点"""
+    return {
         "status": "ok",
         "service": "mcp-neo4j-memory",
         "version": "1.0.0"
-    })
+    }
 
-# Register handlers
-@server.list_tools()
-async def handle_list_tools() -> List[types.Tool]:
-    return [
-        types.Tool(
-            name="create_entities",
-            description="Create multiple new entities in the knowledge graph",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "entities": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {"type": "string", "description": "The name of the entity"},
-                                "type": {"type": "string", "description": "The type of the entity"},
-                                "observations": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "An array of observation contents associated with the entity"
-                                }
-                            },
-                            "required": ["name", "type", "observations"]
-                        }
-                    }
-                },
-                "required": ["entities"]
-            }
-        ),
-        types.Tool(
-            name="create_relations",
-            description="Create multiple new relations between entities in the knowledge graph. Relations should be in active voice",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "relations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "source": {"type": "string", "description": "The name of the entity where the relation starts"},
-                                "target": {"type": "string", "description": "The name of the entity where the relation ends"},
-                                "relationType": {"type": "string", "description": "The type of the relation"}
-                            },
-                            "required": ["source", "target", "relationType"]
-                        }
-                    }
-                },
-                "required": ["relations"]
-            }
-        ),
-        types.Tool(
-            name="add_observations",
-            description="Add new observations to existing entities in the knowledge graph",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "observations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "entityName": {"type": "string", "description": "The name of the entity to add the observations to"},
-                                "contents": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "An array of observation contents to add"
-                                }
-                            },
-                            "required": ["entityName", "contents"]
-                        }
-                    }
-                },
-                "required": ["observations"]
-            }
-        ),
-        types.Tool(
-            name="delete_entities",
-            description="Delete multiple entities and their associated relations from the knowledge graph",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "entityNames": {
-                        "type": "array",
-                        "items": {"type": "string", "description": "An array of entity names to delete"}
-                    }
-                },
-                "required": ["entityNames"]
-            }
-        ),
-        types.Tool(
-            name="delete_observations",
-            description="Delete specific observations from entities in the knowledge graph",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "deletions": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "entityName": {"type": "string", "description": "The name of the entity containing the observations"},
-                                "observations": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "An array of observations to delete"
-                                }
-                            },
-                            "required": ["entityName", "observations"]
-                        }
-                    }
-                },
-                "required": ["deletions"]
-            }
-        ),
-        types.Tool(
-            name="delete_relations",
-            description="Delete multiple relations from the knowledge graph",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "relations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "source": {"type": "string", "description": "The name of the entity where the relation starts"},
-                                "target": {"type": "string", "description": "The name of the entity where the relation ends"},
-                                "relationType": {"type": "string", "description": "The type of the relation"}
-                            },
-                            "required": ["source", "target", "relationType"]
-                        }
-                    }
-                },
-                "required": ["relations"]
-            }
-        ),
-        types.Tool(
-            name="read_graph",
-            description="Read the entire knowledge graph",
-            inputSchema={
-                "type": "object",
-                "properties": {}
-            }
-        ),
-        types.Tool(
-            name="search_nodes",
-            description="Search for nodes in the knowledge graph based on a query",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "The search query to match against entity names, types, and observation content"}
-                },
-                "required": ["query"]
-            }
-        ),
-        types.Tool(
-            name="find_nodes",
-            description="Open specific nodes in the knowledge graph by their names",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "names": {
-                        "type": "array",
-                        "items": {"type": "string", "description": "An array of entity names to retrieve"}
-                    }
-                },
-                "required": ["names"]
-            }
-        )
-    ]
+# 挂载MCP服务器
+app.mount("/", mcp.sse_app())
 
-@server.call_tool()
-async def handle_call_tool(
-    name: str, arguments: Dict[str, Any] | None
-) -> List[types.TextContent | types.ImageContent]:
-    try:
-        if not arguments:
-            raise ValueError(f"No arguments provided for tool: {name}")
-
-        if name == "create_entities":
-            entities = [Entity(**entity) for entity in arguments.get("entities", [])]
-            result = await memory.create_entities(entities)
-            return [types.TextContent(type="text", text=json.dumps([e.model_dump() for e in result], indent=2))]
-            
-        elif name == "create_relations":
-            relations = [Relation(**relation) for relation in arguments.get("relations", [])]
-            result = await memory.create_relations(relations)
-            return [types.TextContent(type="text", text=json.dumps([r.model_dump() for r in result], indent=2))]
-            
-        elif name == "add_observations":
-            observations = [ObservationAddition(**obs) for obs in arguments.get("observations", [])]
-            result = await memory.add_observations(observations)
-            return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
-            
-        elif name == "delete_entities":
-            await memory.delete_entities(arguments.get("entityNames", []))
-            return [types.TextContent(type="text", text="Entities deleted successfully")]
-            
-        elif name == "delete_observations":
-            deletions = [ObservationDeletion(**deletion) for deletion in arguments.get("deletions", [])]
-            await memory.delete_observations(deletions)
-            return [types.TextContent(type="text", text="Observations deleted successfully")]
-            
-        elif name == "delete_relations":
-            relations = [Relation(**relation) for relation in arguments.get("relations", [])]
-            await memory.delete_relations(relations)
-            return [types.TextContent(type="text", text="Relations deleted successfully")]
-            
-        elif name == "read_graph":
-            result = await memory.read_graph()
-            return [types.TextContent(type="text", text=json.dumps(result.model_dump(), indent=2))]
-            
-        elif name == "search_nodes":
-            result = await memory.search_nodes(arguments.get("query", ""))
-            return [types.TextContent(type="text", text=json.dumps(result.model_dump(), indent=2))]
-            
-        elif name == "find_nodes":
-            result = await memory.find_nodes(arguments.get("names", []))
-            return [types.TextContent(type="text", text=json.dumps(result.model_dump(), indent=2))]
-            
-        else:
-            raise ValueError(f"Unknown tool: {name}")
-            
-    except Exception as e:
-        logger.error(f"Error handling tool call: {e}")
-        return [types.TextContent(type="text", text=f"Error: {str(e)}")]
-
-# MCP endpoint with proper SSE support
-@app.route("/mcp", methods=["GET", "POST"])
-def mcp_endpoint():
-    """Handle MCP requests with proper SSE support"""
-    logger.info(f"MCP request received: {request.method} {request.path}")
-    logger.debug(f"Headers: {request.headers}")
-    
-    if request.method == "GET":
-        # Handle SSE connection
-        logger.info("Handling SSE connection")
-        
-        def generate():
-            # Send initial connected message
-            yield "data: {\"type\":\"connected\"}\n\n"
-            
-            # Keep connection alive
-            while True:
-                # Send a ping every 30 seconds to keep the connection alive
-                yield "data: {\"type\":\"ping\"}\n\n"
-                time.sleep(30)
-        
-        # Set up SSE response with proper headers
-        response = Response(
-            stream_with_context(generate()),
-            mimetype="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Content-Type",
-                "X-Accel-Buffering": "no"  # Disable buffering for Nginx
-            }
-        )
-        return response
-    
-    elif request.method == "POST":
-        # Handle JSON-RPC style requests
-        logger.info("Handling POST request")
-        data = request.get_json()
-        if not data:
-            logger.error("Invalid request: No JSON data")
-            return jsonify({"error": "Invalid request"}), 400
-
-        try:
-            logger.info(f"MCP method: {data.get('method')}")
-            
-            # Simulate the stdio environment
-            if data.get("method") == "list_tools":
-                logger.info("Handling list_tools request")
-                result = asyncio.run(handle_list_tools())
-                return jsonify({"result": result})
-            elif data.get("method") == "call_tool":
-                logger.info(f"Handling call_tool request: {data.get('params', {}).get('name')}")
-                result = asyncio.run(handle_call_tool(
-                    data.get("params", {}).get("name"), 
-                    data.get("params", {}).get("arguments")
-                ))
-                return jsonify({"result": result})
-            else:
-                logger.error(f"Unknown method: {data.get('method')}")
-                return jsonify({"error": f"Unknown method: {data.get('method')}"}), 400
-        except Exception as e:
-            logger.error(f"Error handling MCP request: {e}")
-            return jsonify({"error": str(e)}), 500
-
-# Add CORS support
-@app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    return response
-
-@app.route("/mcp", methods=["OPTIONS"])
-def mcp_options():
-    """Handle CORS preflight requests"""
-    response = jsonify({"status": "ok"})
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    return response
-
-# Global memory instance
-memory = None
-
-# Main function to be called from __init__.py
-async def main(neo4j_uri, neo4j_user, neo4j_password):
-    """Main entry point for the server."""
-    global memory
-    
-    logger.info(f"Starting Neo4j Memory MCP Server with URI: {neo4j_uri}")
-    
-    # Connect to Neo4j
-    try:
-        neo4j_driver = GraphDatabase.driver(
-            neo4j_uri,
-            auth=(neo4j_user, neo4j_password)
-        )
-
-        # Verify connection
-        neo4j_driver.verify_connectivity()
-        logger.info(f"Connected to Neo4j at {neo4j_uri}")
-    except Exception as e:
-        logger.error(f"Failed to connect to Neo4j: {e}")
-        raise
-
-    # Initialize memory
-    memory = Neo4jMemory(neo4j_driver)
-    
-    # Start the server
-    try:
-        transport = mcp.server.stdio.StdioServerTransport()
-        await server.connect(transport)
-        
-        # Keep the server running
-        await server.wait_until_disconnected()
-    except KeyboardInterrupt:
-        logger.info("Server interrupted, shutting down...")
-    except Exception as e:
-        logger.error(f"Error running server: {e}")
-        raise
-    finally:
-        neo4j_driver.close()
-        logger.info("Server shut down")
-
-# For running the Flask app directly
+# 启动服务器
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    logger.info(f"Starting server on port {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
