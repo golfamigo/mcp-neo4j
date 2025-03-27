@@ -6,20 +6,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the project files
-COPY . .
-
-# Install the mcp-neo4j-memory package
-RUN cd servers/mcp-neo4j-memory && pip install -e .
+# Copy the server code
+COPY src/ /app/src/
+COPY start.py .
 
 # Expose port
 EXPOSE 5000
 
-# Make the start script executable
-RUN chmod +x deploy/mcp-neo4j-memory/start.py
-
-# Run the service with Gunicorn (default)
-ENV RUN_MODE=gunicorn
-
 # Run the application
-CMD ["python", "deploy/mcp-neo4j-memory/start.py"]
+CMD ["python", "start.py"]

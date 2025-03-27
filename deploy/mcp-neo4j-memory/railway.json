@@ -5,7 +5,7 @@
     "buildCommand": "echo 'Building mcp-neo4j-memory service...'"
   },
   "deploy": {
-    "startCommand": "python deploy/mcp-neo4j-memory/start.py",
+    "startCommand": "python start.py",
     "healthcheckPath": "/",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",

@@ -11,10 +11,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger('mcp-neo4j-cypher')
 
-# Add the servers directory to the path
+# Add the src directory to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../..'))
-sys.path.insert(0, os.path.join(project_root, 'servers/mcp-neo4j-cypher/src'))
+sys.path.insert(0, os.path.join(current_dir, 'src'))
 
 # Handle different environment variable names
 neo4j_uri = os.environ.get('NEO4J_URI') or os.environ.get('NEO4J_URL')
@@ -39,7 +38,7 @@ else:
 
 def run_with_flask():
     """Run the service with Flask development server"""
-    from mcp_neo4j_cypher.server import app, db, neo4jDatabase
+    from server import app, db, neo4jDatabase
     
     # Get Neo4j connection details from environment variables
     neo4j_uri = os.environ.get('NEO4J_URI')
@@ -74,10 +73,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger('wsgi')
 
-# Add the servers directory to the path
+# Add the src directory to the path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir))
-sys.path.insert(0, os.path.join(project_root, 'servers/mcp-neo4j-cypher/src'))
+sys.path.insert(0, os.path.join(current_dir, 'src'))
 
 # Handle different environment variable names
 neo4j_uri = os.environ.get('NEO4J_URI') or os.environ.get('NEO4J_URL')
@@ -100,7 +98,7 @@ if neo4j_password:
 else:
     os.environ['NEO4J_PASSWORD'] = 'password'
 
-from mcp_neo4j_cypher.server import app, db, neo4jDatabase
+from server import app, db, neo4jDatabase
 
 try:
     # Get Neo4j connection details from environment variables
@@ -137,7 +135,7 @@ application = app
 
 async def run_with_mcp():
     """Run the service with MCP over stdio"""
-    from mcp_neo4j_cypher.server import main
+    from server import main
     
     # Get Neo4j connection details from environment variables
     neo4j_uri = os.environ.get('NEO4J_URI')

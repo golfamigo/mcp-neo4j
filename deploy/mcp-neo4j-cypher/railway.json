@@ -5,7 +5,7 @@
     "buildCommand": "echo 'Building mcp-neo4j-cypher service...'"
   },
   "deploy": {
-    "startCommand": "python deploy/mcp-neo4j-cypher/start.py",
+    "startCommand": "python start.py",
     "healthcheckPath": "/",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
