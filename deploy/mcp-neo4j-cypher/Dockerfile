@@ -12,14 +12,14 @@ COPY . .
 # Install the mcp-neo4j-cypher package
 RUN cd servers/mcp-neo4j-cypher && pip install -e .
 
-# Set environment variables
-ENV NEO4J_URI=${NEO4J_URI}
-ENV NEO4J_USER=${NEO4J_USER}
-ENV NEO4J_PASSWORD=${NEO4J_PASSWORD}
-ENV PORT=5001
+# Expose port
+EXPOSE 5000
 
-# Expose the port
-EXPOSE ${PORT}
+# Make the start script executable
+RUN chmod +x deploy/mcp-neo4j-cypher/start.py
+
+# Run the service with Gunicorn (default)
+ENV RUN_MODE=gunicorn
 
 # Run the application
 CMD ["python", "deploy/mcp-neo4j-cypher/start.py"]

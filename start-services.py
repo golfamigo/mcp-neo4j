@@ -6,6 +6,7 @@ import asyncio
 import subprocess
 import threading
 import time
+import multiprocessing
 
 # Configure logging
 logging.basicConfig(
@@ -67,9 +68,33 @@ def run_memory_service():
         # Initialize memory
         globals()['memory'] = Neo4jMemory(neo4j_driver)
         
-        # Run the Flask app - explicitly pass the port
-        logger.info(f"Starting Memory Flask web server on port {memory_port}")
-        app.run(host='0.0.0.0', port=memory_port, threaded=True)
+        # Run the Flask app with Gunicorn
+        logger.info(f"Starting Memory Flask web server with Gunicorn on port {memory_port}")
+        
+        # Create a temporary WSGI file for the memory service
+        wsgi_path = os.path.join(os.getcwd(), 'memory_wsgi.py')
+        with open(wsgi_path, 'w') as f:
+            f.write("""
+import sys
+import os
+
+# Add the servers directory to the path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(current_dir, 'servers/mcp-neo4j-memory/src'))
+
+from mcp_neo4j_memory.server import app as application
+""")
+        
+        # Start Gunicorn
+        cmd = [
+            "gunicorn",
+            "--bind", f"0.0.0.0:{memory_port}",
+            "--workers", "2",
+            "--timeout", "120",
+            "memory_wsgi:application"
+        ]
+        subprocess.run(cmd)
+        
     except Exception as e:
         logger.error(f"Error running memory service: {e}")
         
@@ -112,9 +137,33 @@ def run_cypher_service():
         globals()['db'] = neo4jDatabase(neo4j_uri, neo4j_username, neo4j_password)
         logger.info(f"Cypher service connected to Neo4j at {neo4j_uri}")
         
-        # Run the Flask app - explicitly pass the port
-        logger.info(f"Starting Cypher Flask web server on port {cypher_port}")
-        app.run(host='0.0.0.0', port=cypher_port, threaded=True)
+        # Run the Flask app with Gunicorn
+        logger.info(f"Starting Cypher Flask web server with Gunicorn on port {cypher_port}")
+        
+        # Create a temporary WSGI file for the cypher service
+        wsgi_path = os.path.join(os.getcwd(), 'cypher_wsgi.py')
+        with open(wsgi_path, 'w') as f:
+            f.write("""
+import sys
+import os
+
+# Add the servers directory to the path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(current_dir, 'servers/mcp-neo4j-cypher/src'))
+
+from mcp_neo4j_cypher.server import app as application
+""")
+        
+        # Start Gunicorn
+        cmd = [
+            "gunicorn",
+            "--bind", f"0.0.0.0:{cypher_port}",
+            "--workers", "2",
+            "--timeout", "120",
+            "cypher_wsgi:application"
+        ]
+        subprocess.run(cmd)
+        
     except Exception as e:
         logger.error(f"Error running cypher service: {e}")
         
@@ -150,26 +199,15 @@ if __name__ == "__main__":
         # Run only the cypher service
         run_cypher_service()
     else:
-        # Run both services in separate threads
+        # Run both services in separate processes
         logger.info("Starting both services")
         
-        # Start cypher service first
-        cypher_thread = threading.Thread(target=run_cypher_service)
-        cypher_thread.daemon = True
-        cypher_thread.start()
+        # Start cypher service in a separate process
+        cypher_process = multiprocessing.Process(target=run_cypher_service)
+        cypher_process.start()
         
         # Wait a bit to ensure cypher service is up
         time.sleep(2)
         
-        # Then start memory service
-        memory_thread = threading.Thread(target=run_memory_service)
-        memory_thread.daemon = True
-        memory_thread.start()
-        
-        # Keep the main thread alive
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt, shutting down...")
-            sys.exit(0)
+        # Start memory service in the main process
+        run_memory_service()
