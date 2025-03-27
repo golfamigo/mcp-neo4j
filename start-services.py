@@ -14,12 +14,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger('start-services')
 
-# Set default Neo4j connection details if not provided
-if not os.environ.get('NEO4J_URI'):
+# Handle different environment variable names
+neo4j_uri = os.environ.get('NEO4J_URI') or os.environ.get('NEO4J_URL')
+neo4j_user = os.environ.get('NEO4J_USER')
+neo4j_password = os.environ.get('NEO4J_PASSWORD')
+
+# Set environment variables for consistency
+if neo4j_uri:
+    os.environ['NEO4J_URI'] = neo4j_uri
+else:
     os.environ['NEO4J_URI'] = 'bolt://localhost:7687'
-if not os.environ.get('NEO4J_USER'):
+    
+if neo4j_user:
+    os.environ['NEO4J_USER'] = neo4j_user
+else:
     os.environ['NEO4J_USER'] = 'neo4j'
-if not os.environ.get('NEO4J_PASSWORD'):
+    
+if neo4j_password:
+    os.environ['NEO4J_PASSWORD'] = neo4j_password
+else:
     os.environ['NEO4J_PASSWORD'] = 'password'
 
 def run_memory_service():
@@ -58,6 +71,24 @@ def run_memory_service():
         app.run(host='0.0.0.0', port=port, threaded=True)
     except Exception as e:
         logger.error(f"Error running memory service: {e}")
+        
+        # Create a simple error response app
+        from flask import Flask, jsonify
+        error_app = Flask("memory-error")
+        
+        @error_app.route('/', methods=['GET'])
+        def error_response():
+            return jsonify({
+                "status": "error",
+                "service": "mcp-neo4j-memory",
+                "error": str(e),
+                "neo4j_uri": neo4j_uri,
+                "neo4j_user": neo4j_user,
+                "neo4j_password": "***" if neo4j_password else None
+            })
+        
+        port = int(os.environ.get('PORT', 5000))
+        error_app.run(host='0.0.0.0', port=port)
 
 def run_cypher_service():
     """Run the mcp-neo4j-cypher service"""
@@ -85,6 +116,24 @@ def run_cypher_service():
         app.run(host='0.0.0.0', port=port, threaded=True)
     except Exception as e:
         logger.error(f"Error running cypher service: {e}")
+        
+        # Create a simple error response app
+        from flask import Flask, jsonify
+        error_app = Flask("cypher-error")
+        
+        @error_app.route('/', methods=['GET'])
+        def error_response():
+            return jsonify({
+                "status": "error",
+                "service": "mcp-neo4j-cypher",
+                "error": str(e),
+                "neo4j_uri": neo4j_uri,
+                "neo4j_user": neo4j_username,
+                "neo4j_password": "***" if neo4j_password else None
+            })
+        
+        port = int(os.environ.get('PORT', 5001))
+        error_app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
     # Log environment variables for debugging
