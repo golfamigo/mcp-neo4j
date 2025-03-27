@@ -40,7 +40,6 @@ def run_memory_service():
     logger.info("Starting mcp-neo4j-memory service")
     # Set PORT environment variable for the memory service
     memory_port = 5000
-    os.environ['PORT'] = str(memory_port)
     
     sys.path.insert(0, os.path.join(os.getcwd(), 'servers/mcp-neo4j-memory/src'))
     
@@ -68,7 +67,7 @@ def run_memory_service():
         # Initialize memory
         globals()['memory'] = Neo4jMemory(neo4j_driver)
         
-        # Run the Flask app
+        # Run the Flask app - explicitly pass the port
         logger.info(f"Starting Memory Flask web server on port {memory_port}")
         app.run(host='0.0.0.0', port=memory_port, threaded=True)
     except Exception as e:
@@ -96,7 +95,6 @@ def run_cypher_service():
     logger.info("Starting mcp-neo4j-cypher service")
     # Set PORT environment variable for the cypher service
     cypher_port = 5001
-    os.environ['PORT'] = str(cypher_port)
     
     sys.path.insert(0, os.path.join(os.getcwd(), 'servers/mcp-neo4j-cypher/src'))
     
@@ -114,7 +112,7 @@ def run_cypher_service():
         globals()['db'] = neo4jDatabase(neo4j_uri, neo4j_username, neo4j_password)
         logger.info(f"Cypher service connected to Neo4j at {neo4j_uri}")
         
-        # Run the Flask app
+        # Run the Flask app - explicitly pass the port
         logger.info(f"Starting Cypher Flask web server on port {cypher_port}")
         app.run(host='0.0.0.0', port=cypher_port, threaded=True)
     except Exception as e:
@@ -155,14 +153,18 @@ if __name__ == "__main__":
         # Run both services in separate threads
         logger.info("Starting both services")
         
-        memory_thread = threading.Thread(target=run_memory_service)
+        # Start cypher service first
         cypher_thread = threading.Thread(target=run_cypher_service)
-        
-        memory_thread.daemon = True
         cypher_thread.daemon = True
-        
-        memory_thread.start()
         cypher_thread.start()
+        
+        # Wait a bit to ensure cypher service is up
+        time.sleep(2)
+        
+        # Then start memory service
+        memory_thread = threading.Thread(target=run_memory_service)
+        memory_thread.daemon = True
+        memory_thread.start()
         
         # Keep the main thread alive
         try:
