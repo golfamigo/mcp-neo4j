@@ -38,7 +38,10 @@ else:
 def run_memory_service():
     """Run the mcp-neo4j-memory service"""
     logger.info("Starting mcp-neo4j-memory service")
-    os.environ['PORT'] = '5000'
+    # Set PORT environment variable for the memory service
+    memory_port = 5000
+    os.environ['PORT'] = str(memory_port)
+    
     sys.path.insert(0, os.path.join(os.getcwd(), 'servers/mcp-neo4j-memory/src'))
     
     try:
@@ -66,9 +69,8 @@ def run_memory_service():
         globals()['memory'] = Neo4jMemory(neo4j_driver)
         
         # Run the Flask app
-        port = int(os.environ.get('PORT', 5000))
-        logger.info(f"Starting Memory Flask web server on port {port}")
-        app.run(host='0.0.0.0', port=port, threaded=True)
+        logger.info(f"Starting Memory Flask web server on port {memory_port}")
+        app.run(host='0.0.0.0', port=memory_port, threaded=True)
     except Exception as e:
         logger.error(f"Error running memory service: {e}")
         
@@ -87,13 +89,15 @@ def run_memory_service():
                 "neo4j_password": "***" if neo4j_password else None
             })
         
-        port = int(os.environ.get('PORT', 5000))
-        error_app.run(host='0.0.0.0', port=port)
+        error_app.run(host='0.0.0.0', port=memory_port)
 
 def run_cypher_service():
     """Run the mcp-neo4j-cypher service"""
     logger.info("Starting mcp-neo4j-cypher service")
-    os.environ['PORT'] = '5001'
+    # Set PORT environment variable for the cypher service
+    cypher_port = 5001
+    os.environ['PORT'] = str(cypher_port)
+    
     sys.path.insert(0, os.path.join(os.getcwd(), 'servers/mcp-neo4j-cypher/src'))
     
     try:
@@ -111,9 +115,8 @@ def run_cypher_service():
         logger.info(f"Cypher service connected to Neo4j at {neo4j_uri}")
         
         # Run the Flask app
-        port = int(os.environ.get('PORT', 5001))
-        logger.info(f"Starting Cypher Flask web server on port {port}")
-        app.run(host='0.0.0.0', port=port, threaded=True)
+        logger.info(f"Starting Cypher Flask web server on port {cypher_port}")
+        app.run(host='0.0.0.0', port=cypher_port, threaded=True)
     except Exception as e:
         logger.error(f"Error running cypher service: {e}")
         
@@ -132,8 +135,7 @@ def run_cypher_service():
                 "neo4j_password": "***" if neo4j_password else None
             })
         
-        port = int(os.environ.get('PORT', 5001))
-        error_app.run(host='0.0.0.0', port=port)
+        error_app.run(host='0.0.0.0', port=cypher_port)
 
 if __name__ == "__main__":
     # Log environment variables for debugging
