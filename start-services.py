@@ -14,6 +14,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger('start-services')
 
+# Set default Neo4j connection details if not provided
+if not os.environ.get('NEO4J_URI'):
+    os.environ['NEO4J_URI'] = 'bolt://localhost:7687'
+if not os.environ.get('NEO4J_USER'):
+    os.environ['NEO4J_USER'] = 'neo4j'
+if not os.environ.get('NEO4J_PASSWORD'):
+    os.environ['NEO4J_PASSWORD'] = 'password'
+
 def run_memory_service():
     """Run the mcp-neo4j-memory service"""
     logger.info("Starting mcp-neo4j-memory service")
@@ -25,9 +33,11 @@ def run_memory_service():
         from neo4j import GraphDatabase
         
         # Get Neo4j connection details from environment variables
-        neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-        neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
-        neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+        neo4j_uri = os.environ.get('NEO4J_URI')
+        neo4j_user = os.environ.get('NEO4J_USER')
+        neo4j_password = os.environ.get('NEO4J_PASSWORD')
+        
+        logger.info(f"Memory service connecting to Neo4j at {neo4j_uri}")
         
         # Connect to Neo4j
         neo4j_driver = GraphDatabase.driver(
@@ -59,9 +69,11 @@ def run_cypher_service():
         from mcp_neo4j_cypher.server import main, app, db, neo4jDatabase
         
         # Get Neo4j connection details from environment variables
-        neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-        neo4j_username = os.environ.get('NEO4J_USER', 'neo4j')
-        neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+        neo4j_uri = os.environ.get('NEO4J_URI')
+        neo4j_username = os.environ.get('NEO4J_USER')
+        neo4j_password = os.environ.get('NEO4J_PASSWORD')
+        
+        logger.info(f"Cypher service connecting to Neo4j at {neo4j_uri}")
         
         # Connect to Neo4j
         globals()['db'] = neo4jDatabase(neo4j_uri, neo4j_username, neo4j_password)
@@ -75,6 +87,10 @@ def run_cypher_service():
         logger.error(f"Error running cypher service: {e}")
 
 if __name__ == "__main__":
+    # Log environment variables for debugging
+    logger.info(f"NEO4J_URI: {os.environ.get('NEO4J_URI')}")
+    logger.info(f"NEO4J_USER: {os.environ.get('NEO4J_USER')}")
+    
     # Get the service to run from environment variable
     service = os.environ.get('SERVICE', 'all')
     
