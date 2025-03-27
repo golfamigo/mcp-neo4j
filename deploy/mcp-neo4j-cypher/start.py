@@ -40,7 +40,7 @@ if __name__ == "__main__":
             logger.info(f"Connected to Neo4j at {neo4j_uri}")
             
             # Run the Flask app
-            port = int(os.environ.get('PORT', 5000))
+            port = int(os.environ.get('PORT', 5001))
             logger.info(f"Starting Flask web server on port {port}")
             app.run(host='0.0.0.0', port=port)
         else:

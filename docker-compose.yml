@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  mcp-neo4j-memory:
+    build:
+      context: .
+      dockerfile: deploy/mcp-neo4j-memory/Dockerfile
+    environment:
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - PORT=5000
+    ports:
+      - "5000:5000"
+    restart: on-failure
+
+  mcp-neo4j-cypher:
+    build:
+      context: .
+      dockerfile: deploy/mcp-neo4j-cypher/Dockerfile
+    environment:
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - PORT=5001
+    ports:
+      - "5001:5001"
+    restart: on-failure

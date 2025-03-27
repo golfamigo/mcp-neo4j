@@ -9,17 +9,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the project files
 COPY . .
 
-# Install the mcp-neo4j-memory package
+# Install the mcp-neo4j-memory and mcp-neo4j-cypher packages
 RUN cd servers/mcp-neo4j-memory && pip install -e .
+RUN cd servers/mcp-neo4j-cypher && pip install -e .
 
 # Set environment variables
 ENV NEO4J_URI=${NEO4J_URI}
 ENV NEO4J_USER=${NEO4J_USER}
 ENV NEO4J_PASSWORD=${NEO4J_PASSWORD}
-ENV PORT=5000
 
-# Expose the port
-EXPOSE ${PORT}
+# Expose ports
+EXPOSE 5000 5001
 
-# Run the application
-CMD ["python", "start.py"]
+# Make the start script executable
+RUN chmod +x start-services.py
+
+# Run the services
+CMD ["python", "start-services.py"]

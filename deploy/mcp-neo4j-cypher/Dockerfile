@@ -16,7 +16,7 @@ RUN cd servers/mcp-neo4j-cypher && pip install -e .
 ENV NEO4J_URI=${NEO4J_URI}
 ENV NEO4J_USER=${NEO4J_USER}
 ENV NEO4J_PASSWORD=${NEO4J_PASSWORD}
-ENV PORT=5000
+ENV PORT=5001
 
 # Expose the port
 EXPOSE ${PORT}
