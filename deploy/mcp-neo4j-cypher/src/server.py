@@ -50,6 +50,16 @@ class neo4jDatabase:
 app = Flask(__name__)
 server = Server("neo4j-manager")
 
+# Add a root route for health checks
+@app.route('/', methods=['GET'])
+def health_check():
+    """Health check endpoint for Railway"""
+    return jsonify({
+        "status": "ok",
+        "service": "mcp-neo4j-cypher",
+        "version": "1.0.0"
+    })
+
 # Register handlers
 @server.list_tools()
 async def handle_list_tools() -> List[types.Tool]:
