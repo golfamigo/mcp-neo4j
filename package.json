@@ -2,7 +2,9 @@
   "name": "@mcp-neo4j/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "start": "python start.py"
+  },
   "private": true,
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",

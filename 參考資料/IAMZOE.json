@@ -1,0 +1,554 @@
+{
+  "name": "IAMZOE",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8423cfac-6e3c-401b-bc99-68871ec81460",
+              "name": "text",
+              "value": "={{ $('Webhook').item.json.body.events[0].message.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        -340
+      ],
+      "id": "75802bbd-852a-441d-9743-a54fcdb33705",
+      "name": "Agent Input"
+    },
+    {
+      "parameters": {
+        "operation": "getProfile",
+        "userId": "={{ $('Webhook').item.json.body.events[0].source.userId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -340
+      ],
+      "id": "72a43b24-8f8b-493a-8e7b-171563f052f9",
+      "name": "取得User資料",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "BqKZPwHkXBdvma8u",
+          "name": "N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getMessageContent",
+        "messageId": "={{ $('Webhook').item.json.body.events[0].message.id }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -140
+      ],
+      "id": "5924cc2f-31f4-4d6f-8431-957b3aec137f",
+      "name": "取得語音",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "BqKZPwHkXBdvma8u",
+          "name": "N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "binaryPropertyName": "=data",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        640,
+        -140
+      ],
+      "id": "2ee24a90-3bff-49e1-910c-e5cfe668073f",
+      "name": "語音轉文字",
+      "credentials": {
+        "openAiApi": {
+          "id": "OLxvDlcgMtQl97Rz",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.output }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        -140
+      ],
+      "id": "ad2f60a1-c417-4b2f-9c67-bc20aa5a42e6",
+      "name": "訊息種類"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "={{ $('Webhook').item.json.body.events[0].replyToken }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        -140
+      ],
+      "id": "952bdc4b-3fb0-4826-a647-540303e6f4b8",
+      "name": "傳送訊息",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "BqKZPwHkXBdvma8u",
+          "name": "N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b1ea6391-e268-467f-b872-8e46044c820f",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        -140
+      ],
+      "id": "0cb75f6f-2d33-438e-8354-e8e54aacccc2",
+      "name": "Webhook",
+      "webhookId": "b1ea6391-e268-467f-b872-8e46044c820f"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.events[0].message.type }}",
+                    "rightValue": "text",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2bc82b3c-0834-48f3-b53b-368ce8b684e7",
+                    "leftValue": "={{ $('Webhook').item.json.body.events[0].message.type }}",
+                    "rightValue": "audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fbe1f817-54d0-4256-b35a-90b28b484d97",
+                    "leftValue": "={{ $('Webhook').item.json.body.events[0].message.type }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "image"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        140,
+        -140
+      ],
+      "id": "3bd2823a-cec7-4a19-9779-e154ce9d8254",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "getProfile",
+        "userId": "={{ $('Webhook').item.json.body.events[0].source.userId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        340,
+        -140
+      ],
+      "id": "e14f75ab-78c0-4e4d-8b90-437083ece62e",
+      "name": "LineMessaging",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "BqKZPwHkXBdvma8u",
+          "name": "N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getMessageContent",
+        "messageId": "={{ $('Webhook').item.json.body.events[0].message.id }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        480,
+        40
+      ],
+      "id": "b54f5cfe-f443-46af-8dd4-a0bb8204aaa5",
+      "name": "取得圖片",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "BqKZPwHkXBdvma8u",
+          "name": "N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}\n",
+        "options": {
+          "systemMessage": "=你是一個資料庫操作員，你會使用你的工具，協助用戶處理預約管理的工作\n現在時間{{ $now.setZone(\"Asia/Taipei\") }}\n以下是你所有可使用的工具\n你會使用list tool取得工具使用的方法\n在實際執行操作時你會使用 execute tool\n\n注意：除了工具賦予你的能力之外，你不會提供其他的協助\n",
+          "passthroughBinaryImages": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1280,
+        -140
+      ],
+      "id": "d3e63336-1c7a-4cb7-bce9-8ab508f38f0c",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1220,
+        80
+      ],
+      "id": "7dfc2f67-cb88-4d3c-b19d-a8f9ba93820d",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "OLxvDlcgMtQl97Rz",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.events[0].source.userId }}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1360,
+        80
+      ],
+      "id": "b31a59f5-4de5-4e42-b796-df2425fd17ca",
+      "name": "Window Buffer Memory"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-mcp.mcpClientTool",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        80
+      ],
+      "id": "e7ef00f2-8027-4afe-bb0b-6e39a16ee1dc",
+      "name": "List tool",
+      "credentials": {
+        "mcpClientApi": {
+          "id": "JJm8nc8dt6kmQM81",
+          "name": "iamzoeMCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeTool",
+        "toolName": "={{ $fromAI(\"tool_name\",\"populate this with the specific tool name\" ) }}",
+        "toolParameters": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Tool_Parameters', ``, 'json') }}"
+      },
+      "type": "n8n-nodes-mcp.mcpClientTool",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        80
+      ],
+      "id": "1dc40c07-9435-4993-9391-8ce4fcba0597",
+      "name": "Execute tool",
+      "credentials": {
+        "mcpClientApi": {
+          "id": "JJm8nc8dt6kmQM81",
+          "name": "iamzoeMCP"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agent Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取得User資料": {
+      "main": [
+        [
+          {
+            "node": "Agent Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取得語音": {
+      "main": [
+        [
+          {
+            "node": "語音轉文字",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "語音轉文字": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "訊息種類": {
+      "main": [
+        [
+          {
+            "node": "傳送訊息",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "取得User資料",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LineMessaging",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "取得圖片",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessaging": {
+      "main": [
+        [
+          {
+            "node": "取得語音",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "取得圖片": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "訊息種類",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "aeffccf0-1eda-478b-9dcf-d2bc3b88c8be",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "44d8cd01c3e296fac36e019b696666ef465263f58c21082d7172651215b897d2"
+  },
+  "id": "M4k08ETLlIqbwB6h",
+  "tags": [
+    {
+      "createdAt": "2025-03-12T08:15:55.706Z",
+      "updatedAt": "2025-03-12T08:15:55.706Z",
+      "id": "NlOINEgPpLxOAmD9",
+      "name": "booking"
+    }
+  ]
+}

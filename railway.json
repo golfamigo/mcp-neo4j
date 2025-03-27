@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pip install -r requirements.txt && cd servers/mcp-neo4j-memory && pip install -e .",
+  "startCommand": "python start.py",
+  "restartPolicyType": "ON_FAILURE",
+  "restartPolicyMaxRetries": 10
+}
