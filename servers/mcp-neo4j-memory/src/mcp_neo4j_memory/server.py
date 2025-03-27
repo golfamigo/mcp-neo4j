@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+import asyncio
 from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
 
@@ -444,7 +445,7 @@ async def handle_call_tool(
 
 # MCP endpoint for HTTP
 @app.route("/mcp", methods=["POST"])
-async def mcp_endpoint():
+def mcp_endpoint():
     """Handle MCP requests"""
     data = request.get_json()
     if not data:
@@ -454,10 +455,10 @@ async def mcp_endpoint():
         # Simulate the stdio environment
         # In a real implementation, you would parse the request and call the appropriate handler
         if data["method"] == "list_tools":
-            result = await handle_list_tools()
+            result = asyncio.run(handle_list_tools())
             return jsonify({"result": result})
         elif data["method"] == "call_tool":
-            result = await handle_call_tool(data["params"]["name"], data["params"]["arguments"])
+            result = asyncio.run(handle_call_tool(data["params"]["name"], data["params"]["arguments"]))
             return jsonify({"result": result})
         else:
             return jsonify({"error": f"Unknown method: {data['method']}"}), 400
